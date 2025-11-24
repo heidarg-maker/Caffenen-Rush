@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Coffee, Milk, Zap, Skull, Play, RotateCcw } from 'lucide-react';
+import { Coffee, Milk, Zap, Skull, Play, RotateCcw, Flame } from 'lucide-react';
 import { Lane, Entity, EntityType, GameState, Particle } from '../types';
 import { LANE_WIDTH_PCT, PLAYER_Y_POS, INITIAL_SPEED, MAX_SPEED, SPEED_INCREMENT, SPAWN_RATE_BASE } from '../constants';
 import { getBaristaRoast } from '../services/geminiService';
+
+interface Fireball {
+  id: string;
+  lane: Lane;
+  y: number;
+}
 
 const RunnerGame: React.FC = () => {
   // UI State
@@ -24,6 +30,7 @@ const RunnerGame: React.FC = () => {
   const lastTimeRef = useRef<number>(undefined);
   const playerLaneRef = useRef<Lane>(0);
   const entitiesRef = useRef<Entity[]>([]);
+  const fireballsRef = useRef<Fireball[]>([]);
   const speedRef = useRef<number>(INITIAL_SPEED);
   const scoreRef = useRef<number>(0);
   const frameCountRef = useRef<number>(0);
@@ -49,6 +56,7 @@ const RunnerGame: React.FC = () => {
     // Reset Refs
     playerLaneRef.current = 0;
     entitiesRef.current = [];
+    fireballsRef.current = [];
     speedRef.current = INITIAL_SPEED;
     scoreRef.current = 0;
     frameCountRef.current = 0;
@@ -89,6 +97,15 @@ const RunnerGame: React.FC = () => {
     entitiesRef.current.push(newEntity);
   };
 
+  const shootFireball = () => {
+    const newFireball: Fireball = {
+      id: Math.random().toString(36).substr(2, 9),
+      lane: playerLaneRef.current,
+      y: PLAYER_Y_POS - 5
+    };
+    fireballsRef.current.push(newFireball);
+  };
+
   const gameLoop = (time: number) => {
     // Delta time calculation could be added for smoother frame independence,
     // but fixed step is easier for this scale.
@@ -108,11 +125,32 @@ const RunnerGame: React.FC = () => {
       return true;
     });
 
-    // 2. Collision Detection
+    // 2. Move Fireballs
+    fireballsRef.current = fireballsRef.current.filter(fb => {
+      fb.y -= 2; // Fireballs move up faster
+      return fb.y > -20;
+    });
+
+    // 3. Collision Detection
     const playerLane = playerLaneRef.current;
-    // Bounding box: Player is at PLAYER_Y_POS (80), height approx 10. Width approx 1 lane.
-    // Entity hit zone: Y between 75 and 85
     
+    // Check Fireball vs Milk collisions
+    for (const fb of fireballsRef.current) {
+      for (const entity of entitiesRef.current) {
+        if (!entity.collected && entity.type === EntityType.MILK && entity.lane === fb.lane) {
+          // Fireball collision logic
+          if (Math.abs(entity.y - fb.y) < 10) {
+            entity.collected = true; // Destroy milk
+            fb.y = -100; // Destroy fireball (move offscreen to be filtered next frame)
+            scoreRef.current += 50; // Bonus points
+            
+            // Visual effect could go here (explosion particles)
+          }
+        }
+      }
+    }
+
+    // Check Player vs Entity collisions
     for (const entity of entitiesRef.current) {
       if (!entity.collected && entity.lane === playerLane) {
         // Hitbox check
@@ -145,7 +183,7 @@ const RunnerGame: React.FC = () => {
       }
     }
 
-    // 3. Spawning
+    // 4. Spawning
     frameCountRef.current++;
     // Spawn rate increases as speed increases
     const currentSpawnRate = Math.max(20, Math.floor(SPAWN_RATE_BASE / (speedRef.current / INITIAL_SPEED)));
@@ -154,13 +192,13 @@ const RunnerGame: React.FC = () => {
       spawnEntity();
     }
 
-    // 4. Score ticking
+    // 5. Score ticking
     scoreRef.current += 1;
     if (frameCountRef.current % 10 === 0) {
         setGameState(prev => ({...prev, score: scoreRef.current}));
     }
 
-    // 5. Render Trigger
+    // 6. Render Trigger
     setTick(prev => prev + 1);
     
     requestRef.current = requestAnimationFrame(gameLoop);
@@ -175,12 +213,16 @@ const RunnerGame: React.FC = () => {
         playerLaneRef.current = Math.max(-1, playerLaneRef.current - 1) as Lane;
       } else if (e.key === 'ArrowRight') {
         playerLaneRef.current = Math.min(1, playerLaneRef.current + 1) as Lane;
+      } else if (e.code === 'Space') {
+        if (gameState.coffeeCount > 15) {
+          shootFireball();
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState.isPlaying]);
+  }, [gameState.isPlaying, gameState.coffeeCount]);
 
   // Touch Controls
   const touchStartRef = useRef<number | null>(null);
@@ -192,7 +234,11 @@ const RunnerGame: React.FC = () => {
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (!touchStartRef.current) return;
     const diff = e.changedTouches[0].clientX - touchStartRef.current;
-    if (Math.abs(diff) > 30) { // Threshold
+    
+    // Tap detection for shooting (if no swipe)
+    if (Math.abs(diff) < 10 && gameState.coffeeCount > 15) {
+        shootFireball();
+    } else if (Math.abs(diff) > 30) { // Threshold for swipe
       if (diff > 0) {
         playerLaneRef.current = Math.min(1, playerLaneRef.current + 1) as Lane;
       } else {
@@ -202,7 +248,8 @@ const RunnerGame: React.FC = () => {
     touchStartRef.current = null;
   };
 
-  const isSuperMode = gameState.coffeeCount > 5;
+  const isEmiliaMode = gameState.coffeeCount > 15;
+  const isSuperMode = gameState.coffeeCount > 5 && !isEmiliaMode;
 
   return (
     <div 
@@ -215,7 +262,8 @@ const RunnerGame: React.FC = () => {
         className="absolute inset-0 w-full h-[200%] scrolling-bg opacity-30 pointer-events-none"
         style={{
           transform: 'translateY(-50%)',
-          animation: gameState.isPlaying ? `scrollBackground ${2 / (speedRef.current/INITIAL_SPEED)}s linear infinite` : 'none'
+          animation: gameState.isPlaying ? `scrollBackground ${2 / (speedRef.current/INITIAL_SPEED)}s linear infinite` : 'none',
+          filter: isEmiliaMode ? 'hue-rotate(-50deg) saturate(200%)' : 'none'
         }}
       />
       
@@ -237,14 +285,14 @@ const RunnerGame: React.FC = () => {
       {/* Header / HUD */}
       <div className="absolute top-0 left-0 right-0 p-4 z-20 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent">
         <div>
-          <div className="text-3xl font-black text-amber-500 tracking-tighter drop-shadow-md">
+          <div className={`text-3xl font-black tracking-tighter drop-shadow-md ${isEmiliaMode ? 'text-red-500' : 'text-amber-500'}`}>
             {gameState.score.toLocaleString()}
           </div>
           <div className="text-xs text-stone-400 font-bold uppercase tracking-widest">Score</div>
         </div>
         <div className="text-right">
-          <div className="flex items-center gap-1 text-amber-300">
-            <Zap className="w-4 h-4 fill-amber-300" />
+          <div className={`flex items-center gap-1 ${isEmiliaMode ? 'text-red-500' : 'text-amber-300'}`}>
+            <Zap className={`w-4 h-4 ${isEmiliaMode ? 'fill-red-500' : 'fill-amber-300'}`} />
             <span className="text-xl font-bold">{(gameState.speedMultiplier).toFixed(1)}x</span>
           </div>
           <div className="text-xs text-stone-400 font-bold uppercase tracking-widest">Speed</div>
@@ -254,6 +302,25 @@ const RunnerGame: React.FC = () => {
       {/* Game World Layer */}
       <div className="absolute inset-0 z-10">
         
+        {/* Fireballs */}
+        {fireballsRef.current.map(fb => (
+          <div
+            key={fb.id}
+            className="absolute transition-transform duration-75"
+            style={{
+              left: `${(fb.lane + 1) * 33.33}%`,
+              top: `${fb.y}%`,
+              width: '33.33%',
+              height: '10%',
+              transform: `scale(${0.5 + (fb.y / 200)})`,
+            }}
+          >
+             <div className="w-full h-full flex items-center justify-center animate-pulse">
+                <Flame className="w-8 h-8 text-orange-500 fill-yellow-400 drop-shadow-[0_0_10px_rgba(255,165,0,0.8)]" />
+             </div>
+          </div>
+        ))}
+
         {/* Entities */}
         {entitiesRef.current.map(entity => (
           <div
@@ -284,7 +351,7 @@ const RunnerGame: React.FC = () => {
           </div>
         ))}
 
-        {/* Player: Marta / Super-Baginska */}
+        {/* Player: Marta / Super-Baginska / Emilía */}
         <div 
           className="absolute transition-all duration-150 ease-out"
           style={{
@@ -308,35 +375,47 @@ const RunnerGame: React.FC = () => {
                   </div>
                )}
 
-               {/* Marta Visuals */}
+               {/* Character Visuals */}
                <div className={`w-14 h-14 rounded-xl flex items-center justify-center shadow-lg border-2 relative overflow-hidden transition-all duration-500
-                 ${isSuperMode 
-                   ? 'bg-blue-600 border-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.8)]' 
-                   : 'bg-pink-500 border-pink-300'
+                 ${isEmiliaMode 
+                    ? 'bg-red-600 border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.9)]'
+                    : isSuperMode 
+                      ? 'bg-blue-600 border-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.8)]' 
+                      : 'bg-pink-500 border-pink-300'
                  }`}
                >
-                  <span className={`text-4xl relative top-1 select-none transition-filter duration-500 ${isSuperMode ? 'brightness-110 drop-shadow-[0_0_5px_rgba(255,255,255,0.8)]' : ''}`}>
-                    👱‍♀️
+                  <span className={`text-4xl relative top-1 select-none transition-filter duration-500 
+                    ${isEmiliaMode ? 'brightness-125 drop-shadow-[0_0_8px_rgba(255,200,0,0.9)]' : isSuperMode ? 'brightness-110 drop-shadow-[0_0_5px_rgba(255,255,255,0.8)]' : ''}`}>
+                    {isEmiliaMode ? '👩‍🦰' : '👱‍♀️'}
                   </span>
                </div>
 
                 {/* Name Tag */}
                 <div className={`absolute -bottom-4 left-1/2 -translate-x-1/2 px-1 rounded uppercase tracking-wider font-bold whitespace-nowrap transition-all duration-300 z-10
-                  ${isSuperMode 
-                    ? 'bg-blue-900 text-cyan-300 border border-cyan-400 scale-110' 
-                    : 'bg-stone-900/80 text-white'
+                  ${isEmiliaMode
+                    ? 'bg-red-900 text-yellow-300 border border-yellow-500 scale-125'
+                    : isSuperMode 
+                      ? 'bg-blue-900 text-cyan-300 border border-cyan-400 scale-110' 
+                      : 'bg-stone-900/80 text-white'
                   } text-[8px]`}
                 >
-                  {isSuperMode ? 'Super-Baginska' : 'Marta'}
+                  {isEmiliaMode ? 'Emilía' : isSuperMode ? 'Super-Baginska' : 'Marta'}
                 </div>
 
                {/* Sweat particles if fast */}
-               {gameState.speedMultiplier > 1.5 && !isSuperMode && (
+               {gameState.speedMultiplier > 1.5 && !isSuperMode && !isEmiliaMode && (
                  <div className="absolute -right-4 top-0 text-blue-300 text-xs animate-ping">💦</div>
                )}
                {/* Super sparkles */}
                {isSuperMode && (
                   <div className="absolute -right-4 top-0 text-yellow-300 text-xs animate-spin">✨</div>
+               )}
+               {/* Fire particles for Emilia */}
+               {isEmiliaMode && (
+                  <>
+                    <div className="absolute -right-4 -top-2 text-orange-500 text-xs animate-bounce">🔥</div>
+                    <div className="absolute -left-4 top-2 text-red-500 text-xs animate-pulse">🔥</div>
+                  </>
                )}
              </div>
           </div>
@@ -364,8 +443,9 @@ const RunnerGame: React.FC = () => {
             </div>
           </button>
           
-          <div className="mt-8 text-sm text-stone-500">
+          <div className="mt-8 text-sm text-stone-500 flex flex-col gap-1">
             <p>Use <span className="px-2 py-1 bg-stone-700 rounded text-stone-200">←</span> <span className="px-2 py-1 bg-stone-700 rounded text-stone-200">→</span> to move</p>
+            <p className="text-xs text-stone-600 mt-2">Collect 16 coffees to unlock <span className="text-red-500 font-bold">FIREBALLS</span></p>
           </div>
         </div>
       )}
@@ -374,7 +454,9 @@ const RunnerGame: React.FC = () => {
       {gameState.isGameOver && (
         <div className="absolute inset-0 z-50 bg-red-900/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
           <Skull className="w-16 h-16 text-white mb-4 animate-bounce" />
-          <h2 className="text-4xl font-black text-white mb-1">MARTA CRASHED!</h2>
+          <h2 className="text-4xl font-black text-white mb-1">
+            {isEmiliaMode ? "EMILÍA BURNED OUT!" : isSuperMode ? "SUPER CRASH!" : "MARTA CRASHED!"}
+          </h2>
           <p className="text-red-200 mb-6 font-bold">Too much dairy.</p>
           
           <div className="bg-black/40 p-6 rounded-2xl border border-white/10 w-full max-w-sm mb-6 backdrop-blur-xl">
@@ -409,6 +491,15 @@ const RunnerGame: React.FC = () => {
             TRY AGAIN
           </button>
         </div>
+      )}
+      
+      {/* Controls Overlay for Emilia Mode */}
+      {isEmiliaMode && gameState.isPlaying && (
+         <div className="absolute bottom-4 left-0 right-0 text-center animate-pulse z-40">
+            <span className="inline-block px-4 py-1 bg-red-600/80 text-white text-xs font-bold rounded-full border border-red-400 shadow-lg backdrop-blur-sm">
+                PRESS SPACE OR TAP TO SHOOT 🔥
+            </span>
+         </div>
       )}
     </div>
   );
