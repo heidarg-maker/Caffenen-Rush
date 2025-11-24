@@ -1,5 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 
+// Declare process for client-side usage in Vite (polyfilled by define)
+declare const process: any;
+
 // Initialize Gemini Client
 // IMPORTANT: In a real production app, never expose API keys on the client.
 // This is for demonstration using the provided environment variable pattern.

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Coffee, Milk, Zap, Skull, Play, RotateCcw, Flame } from 'lucide-react';
 import { Lane, Entity, EntityType, GameState, Particle } from '../types';
-import { LANE_WIDTH_PCT, PLAYER_Y_POS, INITIAL_SPEED, MAX_SPEED, SPEED_INCREMENT, SPAWN_RATE_BASE } from '../constants';
+import { PLAYER_Y_POS, INITIAL_SPEED, MAX_SPEED, SPEED_INCREMENT, SPAWN_RATE_BASE } from '../constants';
 import { getBaristaRoast } from '../services/geminiService';
 
 interface Fireball {
@@ -40,7 +40,7 @@ const RunnerGame: React.FC = () => {
   // DOM State for rendering (to trigger React updates less frequently than 60fps where possible, 
   // but for this complexity, React state @ 60fps is acceptable if optimized)
   // We will force update via a tick counter for the render cycle.
-  const [tick, setTick] = useState(0);
+  const [, setTick] = useState(0);
 
   const startGame = () => {
     setGameState({
@@ -106,7 +106,7 @@ const RunnerGame: React.FC = () => {
     fireballsRef.current.push(newFireball);
   };
 
-  const gameLoop = (time: number) => {
+  const gameLoop = (_time: number) => {
     // Delta time calculation could be added for smoother frame independence,
     // but fixed step is easier for this scale.
     
