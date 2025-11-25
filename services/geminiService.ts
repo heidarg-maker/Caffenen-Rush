@@ -11,18 +11,18 @@ const ai = new GoogleGenAI({ apiKey });
 
 export const getBaristaRoast = async (score: number, coffeeCount: number): Promise<string> => {
   if (!apiKey) {
-    return "Don't cry over spilt milk. (Add API Key for a real roast!)";
+    return "Ekki gráta yfir helltri mjólk. (Vantar API lykil fyrir alvöru roast!)";
   }
 
   try {
     const prompt = `
-      You are a snarky, pretentious high-end coffee shop barista. 
-      A player just received a "Game Over" in a coffee-run game because they hit a carton of milk.
-      They scored ${score} points and collected ${coffeeCount} cups of espresso.
+      Þú ert hrokafullur íslenskur kaffibarþjónn á dýru kaffihúsi í Reykjavík (eins og Reykjavik Roasters eða Te og Kaffi).
+      Leikmaður var að tapa í kaffileik af því hann klessti á mjólkurfernu.
+      Hann náði ${score} stigum og safnaði ${coffeeCount} espresso bollum.
       
-      Give them a short, witty, 1-sentence roast about their performance. 
-      Make a pun about milk, caffeine, or coffee beans if possible.
-      Be mean but funny.
+      Gefðu honum stutt, fyndið og hrokafullt 1-setningar "roast" á íslensku um frammistöðuna.
+      Notaðu orðaleik um mjólk, kaffi, kaffibaunir eða íslenska kaffimenningu ef hægt er.
+      Vertu vond/ur en fyndin/n.
     `;
 
     const response = await ai.models.generateContent({
@@ -30,9 +30,9 @@ export const getBaristaRoast = async (score: number, coffeeCount: number): Promi
       contents: prompt,
     });
 
-    return response.text?.trim() || "You've been decaffeinated.";
+    return response.text?.trim() || "Þú hefur verið afkaffínvædd/ur.";
   } catch (error) {
     console.error("Gemini Roast Error:", error);
-    return "The barista is too busy judging your order to roast you right now.";
+    return "Barþjónninn er of upptekinn við að dæma pöntunina þína.";
   }
 };

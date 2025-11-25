@@ -27,3 +27,10 @@ export interface Particle {
   y: number;
   color: string;
 }
+
+export interface HighScore {
+  name: string;
+  score: number;
+  coffeeCount: number;
+  date: string;
+}

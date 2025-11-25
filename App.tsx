@@ -9,8 +9,8 @@ const App: React.FC = () => {
       </div>
       
       <div className="hidden md:block absolute bottom-4 right-4 text-stone-600 text-xs text-right opacity-50">
-        <p>Espresso Rush v1.0</p>
-        <p>Powered by React & Gemini</p>
+        <p>Marta Smarta v1.1</p>
+        <p>Keyrt á React & Gemini</p>
       </div>
     </div>
   );
